@@ -14,29 +14,26 @@ using System.Reflection.Emit;
 using Sandbox.ModAPI.Interfaces;
 using System.Drawing;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace InGameScript
 {
-    /*
-     * This script is intended for use with the AtmoMM (movable miner) in Fleshbit's workshop for the game Space Engineers
-     * Timer and Event Controller blocks alone simply do not allow for enough low level control to accomplish the goal
-     * The goal here is to automatically mine a 3D grid or ore, ice, or stone.
-     * 
-     * I accomplish this by seperating the process into steps, using timer blocks to wait for events to complete....
-     * because well...Space Engineers doesn't give you access to thier events in the API and leaves you to poll or just wait long enough.
-     * 
-     * It seems to be working thus far, so meh.
-    */
     partial class Program : MyGridProgram
     {
         /*
-        * Currently, I see no way to get a rotor to rotate by exactly 90 degrees using the command available and timer blocks or event controllers.
-        * Event controllers use greater or equal to, so each quadrant would trigger multiple times after 90 degrees.
-        * Therefor, I have to resort to a script I guess, where precision control is granted.
-        * 
-        * Scripts don't support Events, so we have to split an operation up into steps and wait for them to complete using calls out to timer blocks and back in again.
+         * This script is intended for use with the AtmoMM (movable miner) in Fleshbit's workshop for the game Space Engineers
+         * Timer and Event Controller blocks alone simply do not allow for enough low level control to accomplish the goal
+         * The goal here is to automatically mine a 3D grid or ore, ice, or stone.
+         * 
+         * I accomplish this by seperating the process into steps, using timer blocks to wait for events to complete....
+         * because well...Space Engineers doesn't give you access to thier events in the API and leaves you to poll or just wait long enough.
+         * 
+         * It seems to be working thus far, so meh.
         */
-        
+
+        /*
+         * Which quadrant is currently being mined
+         */
         enum QuadBeingMined
         {
               NONE = 0   // We haven't started mining and need to get to 0 degrees
@@ -47,15 +44,16 @@ namespace InGameScript
         }
 
         /*
-            * Because we have to split operations into steps and wait for them to complete, we will save the command and its params
-            */
+        * Because we have to split operations into steps and wait for them to complete, we will save the command and its params
+        * That way when we get called back from timer blocks, we have that orignal data
+        */
         struct Command
         {
-            public int  m_depth;      // Target depth of the drill
-            public bool m_startQuad;  // Whether to mine out a quad once the target depth is reached
-            public bool m_drillOn;    // Whether to turn the drill on or off   ... TODO - might be combined with the above
+            public float m_depth;      // Target depth of the drill
+            public bool  m_startQuad;  // Whether to mine out a quad once the target depth is reached
+            public bool  m_drillOn;    // Whether to turn the drill on or off   ... TODO - might be combined with the above
 
-            public Command(int depth, bool startQuad, bool drillOn)
+            public Command(float depth, bool startQuad, bool drillOn)
             {
                 m_depth = depth;
                 m_startQuad = startQuad;
@@ -64,7 +62,7 @@ namespace InGameScript
         };
 
         Command? m_outStandingCommand;          // Null if completed or no command received
-        QuadBeingMined m_currentQuadBeingMined;
+        QuadBeingMined m_currentQuadBeingMined; // Quad being mined
         float m_currentQuadColumn = 0.0f;       // Current column we are mining if mining a quadrant
 
         IMyMotorAdvancedStator m_rotor;
@@ -81,6 +79,9 @@ namespace InGameScript
         IMyTimerBlock m_waitDepthAdjZ;          // Wait on a timer block for the actual depth adjustment
 
         IMyTimerBlock m_waitQuadMineRotation;   // Wait on a timer block for the rotation to quadrant to be mined
+        IMyTimerBlock m_waitQuadMineRow;        // Wait on a timer block for a row of a quadrant to be mined
+        IMyTimerBlock m_waitQuadMineCol;        // Wait on a timer block to extend to the next column in a quadrant to be mined
+        IMyTimerBlock m_waitQuadMineRetractXY;  // Wait on a timer block to retract the XY pistons before proceeding to next quadrant
 
         /*
         * Constructor. Called once during the session.
@@ -96,7 +97,10 @@ namespace InGameScript
             m_waitDepthAdjRotation  = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait DepthAdj Rotation)") as IMyTimerBlock;
             m_waitDepthAdjZ         = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait DepthAdj Z)") as IMyTimerBlock;
 
-            m_waitQuadMineRotation = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait QuadMine Rotation)") as IMyTimerBlock;
+            m_waitQuadMineRotation  = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait QuadMine Rotation)") as IMyTimerBlock;
+            m_waitQuadMineRow       = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait QuadMine Row)") as IMyTimerBlock;
+            m_waitQuadMineCol       = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait QuadMine Col)") as IMyTimerBlock;
+            m_waitQuadMineRetractXY = GridTerminalSystem.GetBlockWithName("AtmoMM -Timer Block (Wait QuadMine RetractXY)") as IMyTimerBlock;
 
             m_rotor         = GridTerminalSystem.GetBlockWithName("AtmoMM -Advanced Rotor") as IMyMotorAdvancedStator;
             m_sidePiston    = GridTerminalSystem.GetBlockWithName("AtmoMM -Piston Side") as IMyPistonBase;
@@ -111,6 +115,9 @@ namespace InGameScript
                 m_waitDepthAdjRotation == null ||
                 m_waitDepthAdjZ == null ||
                 m_waitQuadMineRotation == null ||
+                m_waitQuadMineRow == null ||
+                m_waitQuadMineCol == null ||
+                m_waitQuadMineRetractXY == null ||
                 m_rotor == null ||
                 m_sidePiston == null ||
                 m_forwardPiston == null ||
@@ -129,21 +136,20 @@ namespace InGameScript
 
         /*
         * Run every time a programmable block's run actions are invoked
-        * Assumes we start at zero degree rotation
         */ 
         public void Main(string argument, UpdateType updateSource)
         {
-            if(argument == "Start")
+            if (argument == "Start")
             {
                 Echo("Start command was received");
-                AdjustDepth(0, true, true);
+                AdjustDepth(0.0f, true, true);
             }
             else if (argument == "Stop")
             {
                 Echo("Stop command was received");
-                AdjustDepth(0, false, false);
-            } 
-            else if(argument == "ContinueDepthFromXY")
+                AdjustDepth(0.0f, false, false);
+            }
+            else if (argument == "ContinueDepthFromXY")
             {
                 Echo("Continue depth adjustment from XY reset command was received");
                 ContinueDepthAdjustFromXY();
@@ -153,15 +159,30 @@ namespace InGameScript
                 Echo("Continue depth adjustment from rotation command was received");
                 ContinueDepthAdjustFromRotation();
             }
-            else if( argument == "ContinueDepthFromZ")
+            else if (argument == "ContinueDepthFromZ")
             {
                 Echo("Continue depth adjustment from Z command was received");
                 ContinueDepthAdjustFromZ();
             }
-            else if(argument == "ContinueQuadMineFromRotation")
+            else if (argument == "ContinueQuadMineFromRotation")
             {
                 Echo("Continue mining quad from rotation command was received");
                 ContinueQuadMineFromRotation();
+            }
+            else if (argument == "ContinueQuadMineFromRow")
+            {
+                Echo("Continue mining quad from row command was received");
+                ContinueQuadMineFromRow();
+            }
+            else if (argument == "ContinueQuadMineFromCol")
+            {
+                Echo("Continue mining quad from col command was received");
+                ContinueQuadMineFromCol();
+            }
+            else if (argument == "ContinueQuadMineFromRetractXY")
+            {
+                Echo("Continue mining quad from retract xy command was received");
+                ContinueQuadMineFromRetractXY();
             }
             else
             {
@@ -169,7 +190,6 @@ namespace InGameScript
                 message = string.Format(message, argument);
                 Echo(message);
             }
-            
         }
 
         public void DoNextQuad()
@@ -209,6 +229,21 @@ namespace InGameScript
                 Echo("Quad 4 done. Ready to increase depth or reset and finish");
                 m_rotor.UpperLimitDeg = 360;
                 m_currentQuadBeingMined = QuadBeingMined.NONE;
+
+                if(GetCurrentDepth() == 10.0f)
+                {
+                    // We are done
+                    Echo("All done. Resetting mining assembly to original positions");
+                    AdjustDepth(0.0f, false, false);
+                }
+                else
+                {
+                    // Go to the next level down
+                    AdjustDepth( GetCurrentDepth() + 1.0f, false, false);
+                }
+
+                // The depth adjustments will rotate to zero degrees, so no need to do the wait outside of this block
+                return;
             }
 
             m_rotor.TargetVelocityRad = 1;
@@ -238,7 +273,7 @@ namespace InGameScript
         * 
         * This method is the top level method that starts the first step and waits in a timer block to proceed to the next
         */
-        public void AdjustDepth(int depth, bool startQuad, bool drillOn)
+        public void AdjustDepth(float depth, bool startQuad, bool drillOn)
         {
             m_currentQuadBeingMined = QuadBeingMined.NONE;
             m_outStandingCommand = new Command(depth, startQuad, drillOn);
@@ -248,6 +283,8 @@ namespace InGameScript
             m_waitDepthAdjRotation.StopCountdown();
             m_waitDepthAdjZ.StopCountdown();
             m_waitQuadMineRotation.StopCountdown();
+            m_waitQuadMineRow.StopCountdown();
+            m_waitQuadMineRetractXY.StopCountdown();
 
             // Z pistons to zero velocity
             m_depthPiston1.Velocity = 0;
@@ -417,15 +454,42 @@ namespace InGameScript
             }
 
             // Wait
+            m_waitQuadMineRow.StartCountdown();
         }
 
-        private void AdjustQuadrantColumn()
+        private void ContinueQuadMineFromRow()
         {
+            if(m_currentQuadColumn == 10.0f)
+            {
+                // Retract XY pistons before proceeding to next quadrant
+                m_sidePiston.Retract();
+                m_forwardPiston.Retract();
+
+                // Wait
+                m_waitQuadMineRetractXY.StartCountdown();
+
+                return;
+            }
+
+            // Extend to the next column
+            Echo("Extending to the next column in the quadrant being mined");
+
+            m_currentQuadColumn += 1.0f;
             SetPistonPosition(m_forwardPiston, m_currentQuadColumn);
 
             // Wait
+            m_waitQuadMineCol.StartCountdown();
         }
 
+        private void ContinueQuadMineFromCol()
+        {
+            MineRow();
+        }
+
+        private void ContinueQuadMineFromRetractXY()
+        {
+            DoNextQuad();
+        }
     };
 }
 
