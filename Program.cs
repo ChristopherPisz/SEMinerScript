@@ -230,7 +230,7 @@ namespace InGameScript
                 m_rotor.UpperLimitDeg = 360;
                 m_currentQuadBeingMined = QuadBeingMined.NONE;
 
-                if(GetCurrentDepth() == 10.0f)
+                if(GetCurrentDepth() > 39.9f)
                 {
                     // We are done
                     Echo("All done. Resetting mining assembly to original positions");
@@ -239,6 +239,7 @@ namespace InGameScript
                 else
                 {
                     // Go to the next level down
+                    Echo("Going to the next depth level down");
                     AdjustDepth( GetCurrentDepth() + 1.0f, true, true);
                 }
 
@@ -357,12 +358,17 @@ namespace InGameScript
 
                 if (m_outStandingCommand.Value.m_startQuad)
                 {
-                    Echo("Starting to mine quad");
+                    string message = "Depth adjustment complete. Depth is now {0}. Starting to mine next quad";
+                    message = string.Format(message, GetCurrentDepth());
+                    Echo(message);
+
                     DoNextQuad();
                 }
                 else
                 {
-                    Echo("Depth adjustment complete");
+                    string message = "Depth adjustment complete. Depth is now {0}";
+                    message = string.Format(message, GetCurrentDepth());
+                    Echo(message);
                 }
             }
 
@@ -459,7 +465,7 @@ namespace InGameScript
 
         private void ContinueQuadMineFromRow()
         {
-            if(m_currentQuadColumn == 10.0f)
+            if(m_currentQuadColumn > 9.9f)
             {
                 // Retract XY pistons before proceeding to next quadrant
                 m_sidePiston.Retract();
