@@ -14,11 +14,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\chris\\Source\\Repos\\InGameScript\\InGameScript\\InGameScript.csproj",
+      "projectUniqueName": "D:\\Programing Projects\\git-workspace\\SEMinerScript\\InGameScript.csproj",
       "projectName": "InGameScript",
-      "projectPath": "C:\\Users\\chris\\Source\\Repos\\InGameScript\\InGameScript\\InGameScript.csproj",
+      "projectPath": "D:\\Programing Projects\\git-workspace\\SEMinerScript\\InGameScript.csproj",
       "packagesPath": "C:\\Users\\chris\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\chris\\Source\\Repos\\InGameScript\\InGameScript\\obj\\",
+      "outputPath": "D:\\Programing Projects\\git-workspace\\SEMinerScript\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"

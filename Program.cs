@@ -239,7 +239,7 @@ namespace InGameScript
                 else
                 {
                     // Go to the next level down
-                    AdjustDepth( GetCurrentDepth() + 1.0f, false, false);
+                    AdjustDepth( GetCurrentDepth() + 1.0f, true, true);
                 }
 
                 // The depth adjustments will rotate to zero degrees, so no need to do the wait outside of this block
