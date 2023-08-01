@@ -17,6 +17,16 @@ using System.Collections.Generic;
 
 namespace InGameScript
 {
+    /*
+     * This script is intended for use with the AtmoMM (movable miner) in Fleshbit's workshop for the game Space Engineers
+     * Timer and Event Controller blocks alone simply do not allow for enough low level control to accomplish the goal
+     * The goal here is to automatically mine a 3D grid or ore, ice, or stone.
+     * 
+     * I accomplish this by seperating the process into steps, using timer blocks to wait for events to complete....
+     * because well...Space Engineers doesn't give you access to thier events in the API and leaves you to poll or just wait long enough.
+     * 
+     * It seems to be working thus far, so meh.
+    */
     partial class Program : MyGridProgram
     {
         /*
