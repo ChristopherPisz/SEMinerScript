@@ -1,0 +1,5 @@
+C:\Users\chris\Source\Repos\InGameScript\InGameScript\obj\Debug\net6.0\InGameScript.csproj.AssemblyReference.cache
+C:\Users\chris\Source\Repos\InGameScript\InGameScript\obj\Debug\net6.0\InGameScript.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\chris\Source\Repos\InGameScript\InGameScript\obj\Debug\net6.0\InGameScript.AssemblyInfoInputs.cache
+C:\Users\chris\Source\Repos\InGameScript\InGameScript\obj\Debug\net6.0\InGameScript.AssemblyInfo.cs
+C:\Users\chris\Source\Repos\InGameScript\InGameScript\obj\Debug\net6.0\InGameScript.csproj.CoreCompileInputs.cache
